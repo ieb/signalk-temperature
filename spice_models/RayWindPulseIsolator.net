@@ -1,0 +1,11 @@
+* /Users/ieb/timefields/nmea2000/signalk-sailsensors/spice_models/RayWindPulseIsolator.asc
+R1 N002 N003 3.3K
+R3 Out 0 10K
+V1 In 0 PULSE(3.3 0 0.01 0.0005 0.0005 0.002 0.05 100)
+V2 N001 0 3.3
+V3 N002 0 3.3
+XU2 N003 In N001 Out NC_01 4N25
+.tran 100m startup
+.lib 4N25.sub
+.backanno
+.end
