@@ -21,17 +21,17 @@
  */
 (module.exports = function() {
   const stats = require('./stats');
-  var wpi, nodeimu, ads1x15, IMU; 
+
   try {
-    wpi = require('wiring-pi');
-    nodeimu  = require('nodeimu');
-    ads1x15 = require('node-ads1x15')
-    IMU = new nodeimu.IMU();        
+    const wpi = require('wiring-pi');
+    const nodeimu  = require('nodeimu');
+    const ads1x15 = require('node-ads1x15')
+    var IMU = new nodeimu.IMU();        
   } catch (e) {
-    wpi = require('./fakewiring-pi');
-    nodeimu = require('./fakeimu');
-    ads1x15 = require('./fakeads1x15')
-    IMU = new nodeimu.FakeIMU();
+    const wpi = require('./fakewiring-pi');
+    const fakeimu = require('./fakeimu');
+    const ads1x15 = require('./fakeads1x15')
+    var IMU = new fakeimu.FakeIMU();
   }
 
   // Conversion functions.
@@ -135,25 +135,26 @@
    * This class uses a Moving Average for Velocity.
    */
   function PulseToVelocityMovingAverage(pin, bufsz, calibration) {
-    this.pin = pin;
-    this.calibration = calibration;
-    this.distance = 0.0;
-    this.speed = 0.0;
-    this.store = new Array(bufsz+1);
-    var store = this.store;
-    // could use stats classes here but that would be expensive in runtime terms
-    // the ISR needs to be fast to avoid loosing pulses.
-    // the last element of store contains the number of interrupts.
-    this.npulse = 0;
-    var i = 0, n = store.length-1;
+      this.pin = pin;
+      this.calibration = calibration;
+      this.distance = 0.0;
+      this.speed = 0.0;
+      this.store = new Array(bufsz+1);
+      var store = this.store;
+      // could use stats classes here but that would be expensive in runtime terms
+      // the ISR needs to be fast to avoid loosing pulses.
+      // the last element of store contains the number of interrupts.
+      this.npulse = 0;
+      var i = 0, n = store.length-1;
 
-    wpi.pinMode(pin, wpi.INPUT);
-    wpi.pullUpDnControl(pin, wpi.PUD_UP);
-    wpi.wiringPiISR(pin, wpi.INT_EDGE_FALLING, function(delta) {
-      store[i] = delta;
-      i = (i+1)%n;
-      store[n]++;
-    });
+      wpi.pinMode(pin, wpi.INPUT);
+      wpi.pullUpDnControl(pin, wpi.PUD_UP);
+      wpi.wiringPiISR(pin, wpi.INT_EDGE_FALLING, function(delta) {
+        store[i] = delta;
+        i = (i+1)%n;
+        store[n]++;
+      });
+    }
   };
   PulseToVelocityMovingAverage.prototype.close = function() {
     wpi.cancelPiISR(this.pin);
@@ -234,14 +235,14 @@
     var self = this;
     this.adc.readADCSingleEnded(chmap[channel], this.progGainAmp, this.samplesPerSecond, function(err, data) {
         if(err) {
-          cb(err, voltages);
+          throw(err);
         }
         voltages[channel] = data;
         channel++;
         if ( channel < chmap.length) {
-          self.readChannels(channel, chmap, voltages, cb);
+          self._readChannel(channel, chmap, voltages, cb);
         } else {
-          cb(false, voltages);
+          cb(voltages);
         }
     });
   };
@@ -303,7 +304,7 @@
 
 
    
-  function Sensors(app, plugin, config) {
+  function Sensors(config) {
     try {
       // this needs root
       wpi.wiringPiSetup();
@@ -382,30 +383,6 @@
         address: 0x48
       }
     }
-    if ( this.config.deviation === undefined) {
-      this.config.deviation = 0;
-    }
-    if ( this.config.ouputPeriod === undefined) {
-      this.config.outputPeriod = 500;
-    }
-
-    if ( this.config.windPeriod === undefined) {
-      this.config.windPeriod = 100;
-    }
-    if ( this.config.motionPeriod === undefined) {
-      this.config.motionPeriod = 100;
-    }
-    if ( this.config.calculationPeriod === undefined) {
-      this.config.calculationPeriod = 200;
-    }
-    if ( this.config.windSensorNMEA2000Period === undefined) {
-      this.config.windSensorNMEA2000Period = 500;
-    }
-    if ( this.config.waterSensorNMEA2000Period === undefined) {
-      this.config.waterSensorNMEA2000Period = 500;
-    }
-
-
 
     this.leeway = 0;
     this.aparentWind = {
@@ -429,9 +406,9 @@
     this.rateGyro = new RateGyro();
     this.pose = new Pose();
         // register a timer to get ADC data.
-    this.windAngleStats = new stats.AngleStats(10, "wind");
-    this.rawSinVStats = new stats.Stats(10,"windSinV");
-    this.rawCosVStats = new stats.Stats(10,"windCosV");
+    this.windAngleStats = new AngleStats(10, "wind");
+    this.rawSinVStats = new Stats(10,"windSinV");
+    this.rawCosVStats = new Stats(10,"windCosV");
     var adc = new ADC(this.config.ADCAddress.address, this.config.ADCAddress.buss);
 
     var self = this;
@@ -440,7 +417,7 @@
     this.motionInterval = setInterval(function() {
       IMU.getValue(function(e, data) {
         if (e) {
-          console.log("A",e);
+          console.log(e);
           return;
         }
         self.pose.set(data.fusionPose);
@@ -453,20 +430,21 @@
     this.windDirectionInterval = setInterval(function() {
       adc.readChannels(0, [0,1], [], function(e, data) {
         if (e) {
-          console.log("B", e);
+          console.log(e);
           return;
         }
         self.rawSinVStats.set(data[self.config.windSensorHardware.sinADC]);
         self.rawCosVStats.set(data[self.config.windSensorHardware.cosADC]);
-        var sinV = Math.min(1.0,Math.max(0.0,(data[self.config.windSensorHardware.sinADC]-self.config.windSin.min)/(self.config.windSin.max-self.config.windSin.min)));
-        var cosV = Math.min(1.0,Math.max(0.0,(data[self.config.windSensorHardware.cosADC]-self.config.windCos.min)/(self.config.windCos.max-self.config.windCos.min)));
-        self.windAngleStats.setSC(sinV, cosV);
+        var sinV = Math.min(1.0,Math.max(0.0,(data[self.config.windSensorHardware.sinADC]-self.config.windSin.min)/(self.config.windSin.max-self.config.windSin.min))
+        var cosV = Math.min(1.0,Math.max(0.0,(data[self.config.windSensorHardware.cosADC]-self.config.windCos.min)/(self.config.windCos.max-self.config.windCos.min))
+        self.windAngleStats.setSC(dsinV, cosV);
       });
       // if this is faster than the ACS can manage, secondard I2C operations will start before the existing one 
       // has finished. This will only impact concurrent operations to the same I2C address and not concurrent
       // operations on the I2C bus. For instance the IMU can be read seperately as teh 
       // I2C bus addresses each message to the device.
     }, config.windPeriod);
+
 
      // The above handlers all record information into stats that can then be inspected to gather current data.
      // This is used, in combination to produce output including apply corrections for mast motion, heel and other
@@ -497,7 +475,7 @@
             "values": [
                 { 
                   "path": "sensors.timestamp",
-                  "value": Date.now()
+                  "value": millis()
                 },
                 { 
                   "path": "sensors.wind.pulses",
@@ -561,13 +539,13 @@
                 },
                 {
                   "path": "",
-                  "value": self.waterSpeedSensor.distance.toPrecision(4)
+                  "value": self.waterSpeed.trip.toPrecision(4)
                 }
               ]
           }
         ]
       }        
-      // console.log("got sensor delta: " + JSON.stringify(delta))
+      console.log("got sensor delta: " + JSON.stringify(delta))
       app.handleMessage(plugin.id, delta);
     }, config.outputPeriod);
 
@@ -576,9 +554,6 @@
      this.windSpeedNMEA2000Interval = setInterval(function() {
 
      }, config.windSensorNMEA2000Period);
-
-
-
      this.waterSpeedNMEA2000Interval = setInterval(function() {
 
 
@@ -597,43 +572,39 @@
   }
 
   Sensors.prototype.close = function() {
-    this.windSpeedSensor.close();
-    this.waterSpeedSensor.close();
+    // body...
   };
 
   Sensors.prototype.calcHeel = function() {
-    // calcualte the angleOfHeel of the mast based on both pitch and roll.
-    this.pitch = this.pose.pitch.mean();
-    this.roll = this.pose.roll.mean();
-    var pb2 = Math.PI/2, angleOfHeal = 0;
-    if (Math.abs(this.pitch - pb2) < 0.001 || Math.abs(this.roll-pb2) < 0.001) {
-      this.angleOfHeel = pb2;
-    } else {
-      var tanpitch = Math.tan(this.pitch);
-      var tanroll = Math.tan(this.roll);
-      this.angleOfHeel = Math.atan(Math.sqrt(tanpitch*tanpitch+tanroll*tanroll));
-    }
+      // calcualte the angleOfHeel of the mast based on both pitch and roll.
+      this.pitch = this.pose.pitch.mean();
+      this.roll = this.pose.roll.mean();
+      var pb2 = Math.PI/2, angleOfHeal - 0;
+      if (Math.abs(this.pitch - pb2) < 0.001 || Math.abs(this.roll-pb2) < 0.001) {
+        this.angleOfHeel = pb2;
+      } else {
+        var tanpitch = Math.tan(this.pitch);
+        var tanroll = Math.tan(this.roll);
+        this.angleOfHeel = Math.atan(sqrt(tanpitch*tanpitch+tanroll*tanroll));
+      }
   };
 
 
   Sensors.prototype.calcLeeway = function() {
-    // using the standard formula an alternative is to use a KalmanFilter.
-    // see http://robotsforroboticists.com/kalman-filtering/  and http://vm2330.sgvps.net/~syrftest/images/library/20150805142512.pdf
-    // Grouprama. 
-    // This comes from Pedrick see http://www.sname.org/HigherLogic/System/DownloadDocumentFile.ashx?DocumentFileKey=5d932796-f926-4262-88f4-aaca17789bb0
-    // Also in that paper
-    // Upwash angle in degees = UK*cos(awa)*cos(3*MstoKn(aws)*PI/180)
-    // for aws < 30 and awa < 90. UK  =15 for masthead and 5 for fractional
-    if (this.waterSpeed < 1E-3) {
-      this.leeway = 0;
-    } else {
-      this.leeway = this.config.Kfactor * this.roll / (this.waterSpeed * this.waterSpeed);
+      // using the standard formula an alternative is to use a KalmanFilter.
+      // see http://robotsforroboticists.com/kalman-filtering/  and http://vm2330.sgvps.net/~syrftest/images/library/20150805142512.pdf
+      // Grouprama. 
+      // This comes from Pedrick see http://www.sname.org/HigherLogic/System/DownloadDocumentFile.ashx?DocumentFileKey=5d932796-f926-4262-88f4-aaca17789bb0
+      // Also in that paper
+      // Upwash angle in degees = UK*cos(awa)*cos(3*MstoKn(aws)*PI/180)
+      // for aws < 30 and awa < 90. UK  =15 for masthead and 5 for fractional
+      if (this.waterSpeed < 1E-3) {
+        this.leeway = 0;
+      } else {
+        this.leeway = this.config.Kfactor * this.roll / (this.waterSpeed * this.waterSpeed);
+      }
     }
-  };
-
-  Sensors.prototype.calcHeading = function() {
-    this.heading = this.pose.yawToHeading(this.config.deviation);
-  };
+  }
 
 
   var kn30 = KnToMs(30.0);
@@ -642,8 +613,7 @@
       // Upwash angle in degees = UK*cos(awa)*cos(3*MstoKn(aws)*PI/180)
       // for aws < 30 and awa < 90. UK  =15 for masthead and 5 for fractional
     if (this.aparentWind.speed < kn30 && Math.abs(this.aparentWind.angle) < Math.PI/2) {
-      this.aparentWind.upwashAngle = DegToRad(this.config.UpwashK*Math.cos(this.aparentWind.angle)
-        *Math.cos(DegToRad(3*MsToKn(this.aparentWind.speed))));
+      this.aparentWind.upwashAngle = DegToRad(this.config.UpwashK*cos(this.aparentWind.angle)*cos(DegToRad(3*MstoKn(this.aparentWind.speed))));
     } else {
       this.aparentWind.upwashAngle = 0;
     }
@@ -673,7 +643,7 @@
       // see http://www.dewi.de/dewi/fileadmin/pdf/publications/Publikations/S09_2.pdf, figure 9 A100LM-ME1 
       // which appears to be close to most marine annenomiters, abov
       this.windSpeedSensor.read();
-      this.aparentWind.speed = this.windSpeedSensor.speed;
+      this.aparentWind.speed = this.windSensorData.speed;
 
       if ( this.angleOfHeal > 0.174533) { // > 10 degress + 3%
         this.aparentWind.speed = this.aparentWind.speed*1.03;
@@ -684,7 +654,7 @@
       }
       // now the speed is corrected for angle of heal reative horizontal.
       // apply the cosine rule to correct for angle of heal.
-      this.aparentWind.speed =  this.aparentWind.speed*Math.cos(this.angleOfHeal);
+      this.aparentWind.speed =  this.aparentWind.speed*cos(this.angleOfHeal);
 
 
       // apply motion corrections to the windSpeed and windAngle, the mast is moving
@@ -712,7 +682,7 @@
 
 
   Sensors.prototype.calcTrueWind = function() {
-      var stw_lee = this.waterSpeed*Math.cos(this.leeway);
+      var stw_lee = this.waterSpeed*cos(this.leeway);
       var awa_lee = this.aparentWind.angle;
       if ( awa_lee > 0 ) {
         awa_lee = awa_lee +  this.leeway;
@@ -722,12 +692,12 @@
       // this should be a noop, but just in case the leeway downwind caused something wierd.
       awa_lee = fixAngle(awa_lee);
 
-      var ctws = Math.sqrt((stw_lee*stw_lee+this.aparentWind.speed*this.aparentWind.speed)-(2*stw_lee*this.aparentWind.speed*Math.cos(awa_lee)));
-      var ctwa = 0.0;
-      if ( ctws > 1.0E-3 ) {
+      var ctws = Math.sqrt((stw_lee*stw_lee+this.aparentWind.speed*this.aparentWind.speed)-(2*stw_lee*this.aparentWind.speed*cos(awa_lee)));
+      var ctwa = 0.0F;
+      if ( ctws > 1.0E-3F ) {
           ctwa = (this.aparentWind.speed*Math.cos(awa_lee)-stw_lee)/ctws;
-          if ( ctwa > 0.9999 || ctwa < -0.9999) {
-              ctwa = 0.0;
+          if ( ctwa > 0.9999F || ctwa < -0.9999F) {
+              ctwa = 0.0F;
           } else {
               ctwa = Math.acos(ctwa);
           }
@@ -736,14 +706,14 @@
           ctwa = -ctwa;
       }
       this.trueWind.speed = ctws;
-      this.trueWind.angle = ctwa;
+      this.trueeWind.angle = ctwa;
     }
 
 
 
 
   return {
-    Sensors : Sensors
+    WindSensor : WindSensor
   };
 }());
 
