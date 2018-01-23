@@ -1,5 +1,5 @@
 {
-  "name": "@signalk/signalk-temperature",
+  "name": "@ieb/signalk-temperature",
   "version": "1.4.0",
   "description": "Plugin that reads Temperature from DS18B20 sensors conencted to the 1 wire interface.",
   "main": "index.js",

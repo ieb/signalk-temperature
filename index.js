@@ -27,7 +27,7 @@ module.exports = function(app) {
     console.log("signalk-temperature: 1 Wire enabled, detecting sensors ");
   } else {
     var sensors = require('./fakesensor');
-    console.log("signalk-temperature: 1 Wire is not enabled, Created Fake Sensor ", sensors);
+    console.log("signalk-temperature: 1 Wire is not enabled, Created Fake Sensor ");
   }
   var plugin = {};
   var unsubscribes = [];
@@ -42,7 +42,7 @@ module.exports = function(app) {
 
 
   plugin.start = function(config) {
-    console.log("Temperature Config ", JSON.stringify(config));
+    // console.log("Temperature Config ", JSON.stringify(config));
     var IMU;
 
     plugin.temperatureInterval = setInterval(function() {
@@ -74,7 +74,7 @@ module.exports = function(app) {
             }
           ]
         }        
-        console.log("signalk-temperature: got temperature data: " + JSON.stringify(delta))
+        // console.log("signalk-temperature: got temperature data: " + JSON.stringify(delta))
         app.handleMessage(plugin.id, delta);
       })
     }, config.temperaturePeriod*1000);
