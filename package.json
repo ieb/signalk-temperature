@@ -12,7 +12,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "baconjs": "^0.7.88",
-    "ds18b20-raspi": "^0.3.4"
+    "ds18b20-raspi": "^0.3.6"
   },
   "repository": {
     "type": "git",
